@@ -1,0 +1,13 @@
+name = "qtcihaldane"
+uuid = "7e2cb1b9-f9a0-462b-8843-6629f117cf69"
+authors = ["Ritter.Marc <Ritter.Marc@physik.uni-muenchen.de> and contributors"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1.9"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
