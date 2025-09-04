@@ -1,4 +1,4 @@
-using qtcihaldane
+using QTCIHaldane
 using Test
 
 @testset "qtcihaldane.jl" begin
