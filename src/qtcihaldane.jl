@@ -9,6 +9,8 @@ using BenchmarkTools
 using ITensors
 using JLD2
 
+include("utility.jl")
+include("cachedfunc.jl")
 include("honeycomb.jl")
 include("kanemele.jl")
 include("haldane.jl")

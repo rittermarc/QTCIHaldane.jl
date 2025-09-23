@@ -69,8 +69,6 @@ function get_HR(
     return HR
 end
 
-antisymmetricproduct(u, v) = u[1] * v[2] - u[2] * v[1]
-
 function get_Hlambda(
     q::Integer,
     k::Vector{Float64},

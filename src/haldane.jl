@@ -1,12 +1,3 @@
-pauli0 = [1. 0.; 0. 1.]
-pauli = [
-    [0. 1.; 1. 0.],
-    [0. -1.0im; 1.0im 0.],
-    [1. 0.; 0. -1.]
-]
-
-antisymmetricproduct(u, v) = u[1] * v[2] - u[2] * v[1]
-
 function haldane(k, t2, ϕ, m)
     a::Vector{Vector{Float64}} =
     [
@@ -21,51 +12,6 @@ function haldane(k, t2, ϕ, m)
         (m - 2 * t2 * sin(ϕ) * sum(sin(k' * bi) for bi in b)) * pauli[3]    # staggered offset
 end
 
-function scalar(a::Matrix)
-    if size(a) == (1, 1)
-        return first(a)
-    else
-        throw(ArgumentError("$a is not a scalar."))
-    end
-end
-
-function evaluate_qtt(qtt, q::Vector{<:Integer})
-    return scalar(prod(T[:, i, :] for (T, i) in zip(qtt, q)))
-end
-
-struct cachedfunc{ValueType}
-    f::Function
-    d::Dict{Vector{Int}, ValueType}
-
-    function cachedfunc(::Type{ValueType}, f::Function) where ValueType
-        new{ValueType}(f, Dict())
-    end
-end
-
-function (cf::cachedfunc{ValueType})(x::Vector{Int})::ValueType where {ValueType}
-    if haskey(cf.d, x)
-        return cf.d[x]
-    else
-        val = cf.f(x)
-        cf.d[deepcopy(x)] = val
-        return val
-    end
-end
-
-Base.broadcastable(x::cachedfunc) = Ref(x)
-
-function sumqtt(qtt)
-    return prod(sum(T, dims=2)[:, 1, :] for T in qtt)[1]
-end
-
-function maxrelerror(f, qtt::Vector{Array{Float64, 3}}, indices::Vector{Vector{Int}})
-    return maximum(abs(f(i) - evaluate_qtt(qtt, i)) / abs(f(i)) for i in indices)
- end
-
- function maxabserror(f, qtt::Vector{Array{Float64, 3}}, indices::Vector{Vector{Int}})
-     return maximum(abs(f(i) - evaluate_qtt(qtt, i)) for i in indices)
- end
-
 function crossinterpolate_chern(
     ::Type{ValueType},
     f,
@@ -73,7 +19,7 @@ function crossinterpolate_chern(
     firstpivot::TCI.MultiIndex=ones(Int, length(localdims));
     tolerance::Float64=1e-8,
     maxiter::Int=200,
-    sweepstrategy::Symbol,
+    sweepstrategy::Symbol=:backandforth,
     pivottolerance::Float64=1e-12,
     normalizeerror=true,
     verbosity::Int=0,
@@ -81,7 +27,7 @@ function crossinterpolate_chern(
     evalooserror::Bool=false,
     oosindices::Vector{TCI.MultiIndex}=[rand([1, 2], length(localdims)) for _ in 1:2000],
 ) where {ValueType}
-    tci = TCI.TensorCI{ValueType}(f, localdims, firstpivot)
+    tci = TCI.TensorCI1{ValueType}(f, localdims, firstpivot)
     n = length(tci)
     errors = Float64[]
     cherns = Float64[]
@@ -97,8 +43,8 @@ function crossinterpolate_chern(
 
     for iter in TCI.rank(tci)+1:maxiter
         foward_sweep = (
-            sweepstrategy == TCI.SweepStrategies.forward ||
-            (sweepstrategy != TCI.SweepStrategies.backward && isodd(iter))
+            sweepstrategy == :forward ||
+            (sweepstrategy != :backward && isodd(iter))
         )
 
         if foward_sweep
@@ -142,6 +88,7 @@ function evaluatechern_haldane(
     t2::Float64=1e-1,
     tolerance::Float64=1e-4,
     evalooserror::Bool=false,
+    datadirectory=".",
 )
     phi = pi/2
     m = 3sqrt(3) * t2 + deltam
@@ -159,38 +106,15 @@ function evaluatechern_haldane(
         1, q, nquantics)
 
     localdims = fill(4, nquantics)
-    #cf = TCI.CachedFunction{Float64}(f, localdims)
     cf = cachedfunc(Float64, f)
-
-    # proposedpivots = [
-    #     TCI.optfirstpivot(cf, dims, rand([1, 2, 3, 4], nquantics)) for p in 1:1000
-    # ]
-    #firstpivot = proposedpivots[argmax(cf.(proposedpivots))]
-
     firstpivot = TCI.optfirstpivot(cf, localdims)
     println("$firstpivot, $(cf(firstpivot))")
 
-        # [2, 2, 1, 2, 2, 1, 1, 2, 1, 2, 1, 2, 1, 1, 2, 2, 1, 1, 1, 2, 2, 1, 1, 1, 2, 1, 2, 2,
-        #     2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 2, 1][1:2*nquantics])
-    additionalpivots = []
-        # TCI.optfirstpivot(cf, localdims,
-        # [2, 2, 1, 2, 2, 1, 1, 2, 1, 2, 1, 2, 1, 1, 2, 2, 1, 1, 1, 2, 2, 1, 1, 1, 2, 1, 2, 2,
-        #     2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 2, 1][1:2*nquantics]),
-        # TCI.optfirstpivot(cf, localdims),
-        # TCI.optfirstpivot(cf, localdims, localdims)]
-        # TCI.optfirstpivot(cf, localdims, repeat([1, 2], nquantics)),
-        # TCI.optfirstpivot(cf, localdims, repeat([2, 1], nquantics))]
-    # sort!(additionalpivots, by=abs ∘ cf, rev=true)
-    # for a in additionalpivots
-    #     println(a, cf(a))
-    # end
-
     cutxstep = div(ndiscretization, 4)
-    #quarter = div(ndiscretization, 4)
     cutxvals = 1:cutxstep:ndiscretization
-    cutystep = div(ndiscretization, 8192)
+    cutystep = div(ndiscretization, min(2^nquantics, 8192))
     oosindices = [
-        index_to_quantics_fused((kxi, kyi), nquantics)
+        index_to_quantics_fused((kxi, kyi); numdigits=nquantics)
         for kxi in cutxvals, kyi in 684:cutystep:ndiscretization
     ]
 
@@ -203,7 +127,6 @@ function evaluatechern_haldane(
         maxiter=200,
         verbosity=1,
         pivottolerance=1e-16,
-        #additionalpivots = additionalpivots,
         evalooserror=evalooserror,
         oosindices=oosindices[:]
     )
@@ -220,8 +143,8 @@ function evaluatechern_haldane(
 
     savepath::String = (
         evalooserror
-        ? "example/chern/haldane_results_oos/nq$(nquantics)_deltam$(deltam).jld2"
-        : "example/chern/haldane_results/nq$(nquantics)_deltam$(deltam).jld2"
+        ? "$datadirectory/nq$(nquantics)_deltam$(deltam)_oos.jld2"
+        : "$datadirectory/nq$(nquantics)_deltam$(deltam).jld2"
     )
 
     jldsave(
